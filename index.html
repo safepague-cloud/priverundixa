@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificação de Acesso</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      color: #0f172a;
+    }
+    .card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+      max-width: 420px;
+      width: 100%;
+      padding: 32px 24px;
+      text-align: center;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 14.5px;
+      margin-bottom: 28px;
+      line-height: 1.4;
+    }
+    .captcha-box {
+      border: 2px dashed #cbd5e1;
+      border-radius: 16px;
+      padding: 20px 16px;
+      margin-bottom: 20px;
+      background: #f8fafc;
+    }
+    .captcha-images {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 14px auto;
+      max-width: 260px;
+    }
+    .captcha-img {
+      aspect-ratio: 1;
+      border-radius: 12px;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      cursor: pointer;
+      border: 3px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .math-question {
+      font-size: 26px;
+      font-weight: 600;
+      margin: 28px 0 20px;
+    }
+    .options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 0 auto 16px;
+      max-width: 320px;
+    }
+    .option-btn, .next-btn, .final-btn {
+      background: #0f172a;
+      color: white;
+      border: none;
+      padding: 15px 12px;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      width: 100%;
+    }
+    .next-btn, .final-btn {
+      max-width: 280px;
+      margin: 8px auto 0;
+      display: block;
+    }
+    .step {
+      display: none;
+    }
+    .step.active {
+      display: block;
+    }
+    .captcha-img.selected {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .option-btn:hover, .next-btn:hover, .final-btn:hover {
+      background: #1e293b;
+    }
+    .option-btn.correct {
+      background: #16a34a;
+    }
+    .option-btn.wrong {
+      background: #dc2626;
+    }
+    .progress {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+    .final-message {
+      font-size: clamp(16px, 4.5vw, 18px);
+      margin: 20px 0;
+      color: #16a34a;
+      font-weight: 500;
+    }
+
+    @media (max-width: 380px) {
+      .card {
+        padding: 20px 16px;
+      }
+      .captcha-images {
+        gap: 6px;
+      }
+      .options {
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Verificação de Segurança</h1>
+    <p class="subtitle">Confirme que você é humano para continuar.</p>
+
+    <!-- Step 1: Captcha -->
+    <div class="step active" id="step-captcha">
+      <div class="captcha-box">
+        <p style="margin-bottom: 8px; font-weight: 500;">Selecione as 3 imagens iguais</p>
+        <div class="captcha-images" id="captcha-images"></div>
+      </div>
+      <button class="next-btn" id="captcha-btn" disabled>Continuar</button>
+    </div>
+
+    <!-- Step 2: Math 1 -->
+    <div class="step" id="step-math1">
+      <div class="progress">Verificação</div>
+      <div class="math-question" id="q1"></div>
+      <div class="options" id="opt1"></div>
+    </div>
+
+    <!-- Final -->
+    <div class="step" id="step-final">
+      <div class="final-message">Verificação concluída com sucesso.</div>
+      <a class="final-btn button" id="final-btn" href="https://nexorpluma.entreagora.online/l/9b76bf66?shk=76tkdp5d">Continuar</a>
+    </div>
+  </div>
+
+  <script>
+    // ===== CONFIGURAÇÃO =====
+    // Link final da Sharkbot (os parâmetros serão anexados automaticamente pelo script abaixo)
+    // ========================
+
+    const captchaImages = document.getElementById("captcha-images");
+    const captchaBtn = document.getElementById("captcha-btn");
+
+    const emojisPool = ["🔒", "🔑", "⭐", "🔥", "🎁", "💎", "📦", "💡", "🌙", "🎯", "🏆", "⚡"];
+    const totalImages = 6;
+    const lockCount = 3;
+    let correctIndexes = [];
+    let selected = new Set();
+    let targetEmoji = "";
+    let previousTarget = "";
+
+    function generateCaptcha() {
+      captchaImages.innerHTML = "";
+      selected.clear();
+      captchaBtn.disabled = true;
+      correctIndexes = [];
+
+      // Escolhe um emoji alvo diferente do anterior
+      let newTarget;
+      do {
+        newTarget = emojisPool[Math.floor(Math.random() * emojisPool.length)];
+      } while (newTarget === previousTarget && emojisPool.length > 1);
+
+      targetEmoji = newTarget;
+      previousTarget = targetEmoji;
+
+      // Sempre 3 posições aleatórias para o emoji alvo
+      while (correctIndexes.length < lockCount) {
+        const idx = Math.floor(Math.random() * totalImages);
+        if (!correctIndexes.includes(idx)) correctIndexes.push(idx);
+      }
+
+      // Cria uma lista de emojis diferentes do alvo para as outras posições
+      const otherEmojis = emojisPool.filter(e => e !== targetEmoji);
+
+      for (let i = 0; i < totalImages; i++) {
+        const div = document.createElement("div");
+        div.className = "captcha-img";
+        div.dataset.index = i;
+
+        if (correctIndexes.includes(i)) {
+          div.textContent = targetEmoji;
+        } else {
+          div.textContent = otherEmojis[Math.floor(Math.random() * otherEmojis.length)];
+        }
+
+        div.onclick = () => {
+          if (selected.has(i)) {
+            selected.delete(i);
+            div.classList.remove("selected");
+          } else {
+            if (selected.size >= 3) return;
+            selected.add(i);
+            div.classList.add("selected");
+          }
+          captchaBtn.disabled = selected.size !== 3;
+        };
+        captchaImages.appendChild(div);
+      }
+    }
+
+    generateCaptcha();
+
+    captchaBtn.onclick = () => {
+      const correct = correctIndexes.every(i => selected.has(i)) && selected.size === correctIndexes.length;
+      if (correct) {
+        showStep("step-math1");
+        generateMath(1);
+      } else {
+        alert("Seleção incorreta. Tente novamente.");
+        generateCaptcha(); // embaralha de novo
+      }
+    };
+
+    function randomInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function generateMath(step) {
+      const a = randomInt(3, 15);
+      const b = randomInt(3, 15);
+      const answer = a + b;
+      const questionEl = document.getElementById("q" + step);
+      const optionsEl = document.getElementById("opt" + step);
+      questionEl.textContent = `${a} + ${b} = ?`;
+
+      const options = [answer];
+      while (options.length < 4) {
+        let wrong = answer + randomInt(-6, 6);
+        if (wrong <= 0) wrong = answer + randomInt(1, 5);
+        if (!options.includes(wrong)) options.push(wrong);
+      }
+      options.sort(() => Math.random() - 0.5);
+
+      optionsEl.innerHTML = "";
+      options.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.className = "option-btn";
+        btn.textContent = opt;
+        btn.onclick = () => {
+          if (opt === answer) {
+            btn.classList.add("correct");
+            setTimeout(() => {
+              showStep("step-final");
+            }, 400);
+          } else {
+            btn.classList.add("wrong");
+            // Errou: gera uma conta completamente nova
+            setTimeout(() => {
+              generateMath(step);
+            }, 500);
+          }
+        };
+        optionsEl.appendChild(btn);
+      });
+    }
+
+    function showStep(id) {
+      document.querySelectorAll(".step").forEach(s => s.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+  </script>
+<script>
+(function() {
+  var u = new URLSearchParams(window.location.search);
+  var KEYS = [
+    'utm_source','utm_medium','utm_campaign','utm_content','utm_term','utm_id',
+    'fbclid','ttclid','gclid','_fbp',
+    'tsclid',
+    'click_id','kwai_click_id','kwclid','callback',
+    'src','sck','xcod','cv','shk','ph','_bp','_sp',
+    'salesCode','codigo_de_vendas'
+  ];
+  var captured = {};
+  KEYS.forEach(function(k){ var v = u.get(k); if (v) captured[k] = v; });
+  try {
+    var saved = JSON.parse(sessionStorage.getItem('shark_utms') || '{}');
+    Object.keys(captured).forEach(function(k){ saved[k] = captured[k]; });
+    sessionStorage.setItem('shark_utms', JSON.stringify(saved));
+    captured = saved;
+  } catch(e) {}
+  function buildLink(originalHref) {
+    var url = new URL(originalHref, location.origin);
+    Object.keys(captured).forEach(function(k){
+      if (!url.searchParams.has(k)) url.searchParams.set(k, captured[k]);
+    });
+    return url.toString();
+  }
+  // Reescreve no load, nao no clique. Botao do meio dispara auxclick e "abrir em
+  // nova aba" pelo menu de contexto nem chega a disparar evento: com a reescrita
+  // presa ao clique, essas aberturas levavam a URL sem parametro nenhum.
+  function attach() {
+    document.querySelectorAll('a.button, a.cta, a[href*="/l/"], a[href*="/c/"], a[href*="/b/"]').forEach(function(btn){
+      try { btn.href = buildLink(btn.href); } catch(err) {}
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attach);
+  } else {
+    attach();
+  }
+  // Botao inserido depois do load tambem precisa nascer decorado.
+  try {
+    new MutationObserver(attach).observe(document.documentElement, { childList: true, subtree: true });
+  } catch(e) {}
+})();
+</script>
+</body>
+</html>
